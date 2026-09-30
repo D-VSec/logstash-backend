@@ -1,0 +1,27 @@
+logstash-backend/
+├── .github/                    # CI/CD pipelines (e.g., automated cross-compilation matrix)
+│   └── workflows/
+├── cmd/                        # Main entry points for the application
+│   └── logstash/          # Matches the binary name
+│       └── main.go             # Minimally boots configuration and runs the Cobra root command
+├── internal/                   # Private application code (cannot be imported by external tools)
+│   ├── azure/                  # Azure SDK wrappers (Event Hubs, Blob Storage provisioning)
+│   │   ├── client.go
+│   │   ├── eventhub.go
+│   │   └── storage.go
+│   ├── config/                 # Configuration and environment parsing using Viper
+│   │   └── config.go
+│   ├── deployer/               # SSH automation, target package injection, and execution logic
+│   │   ├── ssh.go
+│   │   └── ubuntu.go
+│   └── pipeline/               # Logic that generates and validates Fluent Bit configurations
+│       ├── generator.go
+│       └── templates/          # Embedded raw Fluent Bit configuration templates
+│           └── fluent-bit.conf.tmpl
+├── pkg/                        # Public shared libraries (if external systems need your code)
+│   └── telemetrytypes/
+├── scripts/                    # Helper scripts for bootstrapping, testing, or building
+│   └── install-fluentbit.sh    # The base installation shell script wrapped by the deployer
+├── go.mod                      # Go dependency tracking file
+├── go.sum                      # Go dependency checksum file
+└── README.md                   # Operator and developer documentation
