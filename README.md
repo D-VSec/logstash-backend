@@ -2,6 +2,12 @@
 
 A Go-based VM log archival tool. The control-plane CLI connects to a Linux VM over SSH, installs and configures Fluent Bit, optionally builds and installs a Go archiver daemon, and configures local or Cloudflare R2 storage.
 
+## Project Reference
+
+This project was built with the roadmap.sh **Log Archive Tool** project as its starting point and expanded into a VM-oriented archival system with Fluent Bit collection, filesystem buffering, automated deployment, timestamped `tar.gz` archives, and Cloudflare R2 uploads.
+
+Reference: [roadmap.sh Log Archive Tool](https://roadmap.sh/projects/log-archive-tool)
+
 ## Scope
 
 ### In scope
