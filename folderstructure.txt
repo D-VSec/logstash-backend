@@ -1,27 +1,56 @@
 logstash-backend/
-├── .github/                    # CI/CD pipelines (e.g., automated cross-compilation matrix)
-│   └── workflows/
-├── cmd/                        # Main entry points for the application
-│   └── logstash/          # Matches the binary name
-│       └── main.go             # Minimally boots configuration and runs the Cobra root command
-├── internal/                   # Private application code (cannot be imported by external tools)
-│   ├── azure/                  # Azure SDK wrappers (Event Hubs, Blob Storage provisioning)
-│   │   ├── client.go
-│   │   ├── eventhub.go
-│   │   └── storage.go
-│   ├── config/                 # Configuration and environment parsing using Viper
-│   │   └── config.go
-│   ├── deployer/               # SSH automation, target package injection, and execution logic
-│   │   ├── ssh.go
-│   │   └── ubuntu.go
-│   └── pipeline/               # Logic that generates and validates Fluent Bit configurations
-│       ├── generator.go
-│       └── templates/          # Embedded raw Fluent Bit configuration templates
-│           └── fluent-bit.conf.tmpl
-├── pkg/                        # Public shared libraries (if external systems need your code)
-│   └── telemetrytypes/
-├── scripts/                    # Helper scripts for bootstrapping, testing, or building
-│   └── install-fluentbit.sh    # The base installation shell script wrapped by the deployer
-├── go.mod                      # Go dependency tracking file
-├── go.sum                      # Go dependency checksum file
-└── README.md                   # Operator and developer documentation
+├── .env                       # Local R2 values; ignored by Git
+├── .env.example               # Dummy R2 environment template
+├── .gitignore                 # Protects local environment files
+├── README.md                  # Architecture, deployment, operations, and roadmap
+├── cmd/
+│   ├── logstash/
+│   │   └── main.go            # Deployment and retrieval CLI entry point
+│   └── logstash-archiver/
+│       └── main.go            # Compression and R2 upload daemon entry point
+├── internal/
+│   ├── archiver/
+│   │   ├── worker.go          # Rotates spool files into timestamped tar.gz archives
+│   │   └── worker_test.go     # Archive lifecycle tests
+│   ├── azure/                 # Reserved for future Azure integrations
+│   ├── cli/
+│   │   ├── root.go            # Cobra commands, validation, and service contracts
+│   │   └── root_test.go       # CLI behavior tests
+│   ├── config/                # Reserved for future shared configuration loading
+│   ├── deployer/
+│   │   ├── ssh.go             # SSH setup, teardown, cross-build, and VM installation
+│   │   └── ssh_test.go        # Remote setup script tests
+│   ├── pipeline/              # Reserved for future Fluent Bit config generation
+│   └── storage/
+│       ├── env.go             # Environment-file loading with process overrides
+│       ├── env_test.go        # Environment loading tests
+│       ├── r2.go              # Cloudflare R2 S3-compatible uploader
+│       └── r2_test.go         # R2 uploader construction tests
+├── pkg/                       # Reserved for public reusable packages
+├── scripts/
+│   ├── fluent-bit.conf        # Local Fluent Bit collection and spool configuration
+│   ├── fluent-bit-r2.conf     # R2-mode collection and local spool configuration
+│   ├── install-fluentbit.sh   # Ubuntu Fluent Bit installation script
+│   ├── logrotate-fluent-bit.conf
+│   │                           # Rotates completed Fluent Bit spool files
+│   └── logstash-archiver.service
+│                               # systemd unit for the archiver daemon
+├── go.mod                     # Go module and dependency declarations
+├── go.sum                     # Dependency checksums
+└── folderstructure.txt        # This repository structure reference
+
+Runtime flow:
+
+VM logs
+	-> Fluent Bit
+	-> filesystem buffer and rotated spool files
+	-> logstash-archiver
+	-> timestamped logs_archive_YYYYMMDD_HHMMSS.tar.gz
+	-> local archive directory or Cloudflare R2
+
+Reserved directories are intentionally kept for future implementation:
+
+	internal/azure    Azure-specific services and provisioning
+	internal/config   Shared application configuration
+	internal/pipeline Fluent Bit configuration generation and validation
+	pkg               Public packages shared by external consumers

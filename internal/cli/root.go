@@ -125,6 +125,9 @@ func newDeployCommand(stdout io.Writer, deployer Deployer) *cobra.Command {
 			if options.ArchiverBuild != "none" && options.ArchiverBuild != "linux-amd64" && options.ArchiverBuild != "linux-arm64" {
 				return errors.New("--archiver-build must be linux-amd64, linux-arm64, or none")
 			}
+			if options.Storage == "r2" && options.ArchiverBuild == "none" {
+				return errors.New("--archiver-build cannot be none when --storage is r2")
+			}
 			if options.Auth == "private-key" {
 				return validateRequired("identity-file", options.IdentityFile)
 			}

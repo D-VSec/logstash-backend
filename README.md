@@ -12,16 +12,14 @@ A Go-based VM log archival tool. The control-plane CLI connects to a Linux VM ov
 - Optional teardown of the previous Fluent Bit installation.
 - Fluent Bit filesystem buffering and retry behavior.
 - Collection of common Ubuntu VM logs.
-- Local JSONL log storage.
+- Local Fluent Bit file storage.
 - Rotated-file compression into timestamped `tar.gz` archives.
 - Automatic cross-compilation and transfer of the archiver daemon.
 - systemd and logrotate installation for the archiver workflow.
-- A Fluent Bit S3-compatible configuration for Cloudflare R2.
+- A Cloudflare R2 uploader implemented with the AWS SDK's S3-compatible client.
 
 ### Not yet complete
 
-- The Go archiver uploader is currently an interface, not an R2 implementation.
-- `--storage r2` currently uses Fluent Bit's direct S3-compatible output and produces compressed `.gz` objects, not Go-created `.tar.gz` archives.
 - The `retrieve` command has validation and service boundaries but no archive backend yet.
 - Archive manifests, checksums, indexing, and Archive-tier rehydration are not implemented.
 
@@ -37,19 +35,19 @@ flowchart TB
     subgraph VM["Linux VM"]
         FB["Fluent Bit"]
         BUFFER["Filesystem buffer\n/var/log/fluent-bit-storage"]
-        SPOOL["Rotated JSONL spool\n/var/log/fluent-bit-archive"]
+        SPOOL["Rotated log spool\n/var/log/fluent-bit-archive"]
         ARCH["logstash-archiver\nsystemd service"]
         LOCAL["Local tar.gz archives\n/var/log/fluent-bit-archives"]
-        R2DIRECT["Fluent Bit S3 output"]
+        R2UPLOAD["Go R2 uploader"]
 
         FB --> BUFFER
         FB --> SPOOL
         SPOOL --> ARCH
         ARCH --> LOCAL
-        FB -. r2 mode .-> R2DIRECT
+        ARCH -. r2 mode .-> R2UPLOAD
     end
 
-    R2DIRECT --> R2["Cloudflare R2"]
+      R2UPLOAD --> R2["Cloudflare R2"]
 ```
 
 ### Layer 1: CLI
@@ -113,7 +111,7 @@ It starts from new records with `Read_from_Head Off` and uses filesystem bufferi
 
 Location: `internal/archiver` and `cmd/logstash-archiver`
 
-The archiver scans completed rotated files matching `*.jsonl.*`. It then:
+The archiver scans completed rotated files matching `*.jsonl.*`. The file suffix is used as a rotation marker; the Fluent Bit file output format is version-dependent. It then:
 
 1. Sorts the completed spool files.
 2. Creates a temporary archive.
@@ -136,7 +134,7 @@ If an upload fails, the completed archive and source files remain available for 
 #### Local mode
 
 ```text
-Fluent Bit -> rotated JSONL -> Go archiver -> local tar.gz
+Fluent Bit -> rotated log files -> Go archiver -> local tar.gz
 ```
 
 Local archives are written to:
@@ -147,22 +145,32 @@ Local archives are written to:
 
 #### R2 mode
 
-The current R2 configuration uses Fluent Bit's S3-compatible output:
+R2 deployments use the same local spool and Go archiver, then upload completed tarballs with the S3-compatible R2 API. This path has been verified with a VM deployment and R2 upload:
 
 ```text
-Fluent Bit -> gzip chunk -> Cloudflare R2
+Fluent Bit -> rotated log files -> Go archiver -> tar.gz -> Cloudflare R2
 ```
 
-R2 credentials are supplied through environment variables and installed on the VM as a root-only file:
+R2 credentials are supplied through environment variables during deployment and installed on the VM as a root-only file:
 
 ```text
-/etc/fluent-bit/r2.env
+/etc/logstash-archiver.env
 ```
 
-The planned final R2 flow is:
+The archiver automatically loads this file when it starts. Existing process environment variables take precedence, so no manual `export` commands are required on the VM. For local development, it falls back to `.env` when `/etc/logstash-archiver.env` is absent:
 
-```text
-Fluent Bit -> rotated JSONL -> Go archiver -> tar.gz -> R2
+```bash
+sudo /usr/local/bin/logstash-archiver
+```
+
+The repository includes a dummy `.env` and `.env.example`. Replace the dummy values locally; `.env` is ignored by Git.
+
+For local testing with another file:
+
+```bash
+go run ./cmd/logstash-archiver \
+  --env-file /path/to/r2.env \
+  --once
 ```
 
 ## Deployment
@@ -232,7 +240,7 @@ go run ./cmd/logstash deploy \
 
 ## R2 configuration
 
-Set R2 values in the environment before deployment:
+Set R2 values in `.env` before deployment. The deploy command loads this file automatically:
 
 ```bash
 export R2_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
@@ -266,7 +274,7 @@ Do not put R2 secrets in command-line flags. They can be exposed through shell h
 | Fluent Bit retry buffer   | `/var/log/fluent-bit-storage`     |
 | Rotated spool files       | `/var/log/fluent-bit-archive`     |
 | Completed local archives  | `/var/log/fluent-bit-archives`    |
-| R2 environment file       | `/etc/fluent-bit/r2.env`          |
+| R2 environment file       | `/etc/logstash-archiver.env`      |
 
 Useful checks on the VM:
 
@@ -335,10 +343,8 @@ The deploy command performs this build automatically when `--archiver-build` is 
 
 ## Roadmap
 
-1. Implement the R2 uploader for the Go archiver.
-2. Replace direct Fluent Bit R2 uploads when exact `.tar.gz` archives are required.
-3. Add archive manifests with checksums, source VM, time range, and record counts.
-4. Implement the `retrieve` backend for local and R2 archives.
-5. Add archive retention and cleanup policies.
-6. Add integration tests against a disposable Linux VM.
-7. Add production observability for spool size, archive age, upload failures, and service health.
+1. Add archive manifests with checksums, source VM, time range, and record counts.
+2. Implement the `retrieve` backend for local and R2 archives.
+3. Add archive retention and cleanup policies.
+4. Add integration tests against a disposable Linux VM.
+5. Add production observability for spool size, archive age, upload failures, and service health.

@@ -7,9 +7,14 @@ import (
 
 	"logstash/internal/cli"
 	"logstash/internal/deployer"
+	"logstash/internal/storage"
 )
 
 func main() {
+	if err := storage.LoadEnvFile(".env"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	sshDeployer := deployer.NewSSHDeployer(os.Stdout, os.Stderr)
 	services := cli.Services{
 		Deployer: cli.DeployerFunc(func(ctx context.Context, request cli.DeployRequest) error {

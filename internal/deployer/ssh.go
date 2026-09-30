@@ -86,13 +86,13 @@ func (deployer *SSHDeployer) Deploy(ctx context.Context, request Request) error 
 	}
 
 	target := request.User + "@" + request.Host
-	args := []string{}
+	args := []string{"-T"}
 	if request.Auth == "private-key" {
 		args = append(args, "-o", "BatchMode=yes", "-i", request.IdentityFile)
 	} else {
 		args = append(args, "-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no")
 	}
-	args = append(args, target, "sudo", "bash", "-s")
+	args = append(args, target, "sudo", "/bin/bash", "--noprofile", "--norc", "-s")
 	command := exec.CommandContext(ctx, "ssh", args...)
 	command.Stdin = bytes.NewReader(remoteSetupScript(installScript, config, request, archiverBinary, archiverService, logrotateConfig))
 	command.Stdout = deployer.Stdout
@@ -117,6 +117,7 @@ func remoteSetupScript(installScript, config []byte, request Request, archiverBi
 		script.WriteString("systemctl daemon-reload\n")
 		script.WriteString("systemctl stop logstash-archiver 2>/dev/null || true\n")
 		script.WriteString("systemctl disable logstash-archiver 2>/dev/null || true\n")
+		script.WriteString("rm -f /etc/logstash-archiver.env /etc/systemd/system/fluent-bit.service.d/r2.conf\n")
 	}
 	script.WriteString("printf '%s' '")
 	script.WriteString(encodedInstallScript)
@@ -137,8 +138,6 @@ func remoteSetupScript(installScript, config []byte, request Request, archiverBi
 		script.WriteString("printf '%s' '")
 		script.WriteString(base64.StdEncoding.EncodeToString(logrotateConfig))
 		script.WriteString("' | base64 --decode > /etc/logrotate.d/logstash-fluent-bit\n")
-		script.WriteString("systemctl daemon-reload\n")
-		script.WriteString("systemctl enable --now logstash-archiver\n")
 	}
 	if request.Storage == "r2" {
 		envFile := "R2_ENDPOINT=" + request.R2Endpoint + "\n" +
@@ -147,17 +146,18 @@ func remoteSetupScript(installScript, config []byte, request Request, archiverBi
 			"R2_ACCESS_KEY_ID=" + request.R2AccessKeyID + "\n" +
 			"R2_SECRET_ACCESS_KEY=" + request.R2SecretKey + "\n"
 		encodedEnv := base64.StdEncoding.EncodeToString([]byte(envFile))
-		encodedDropIn := base64.StdEncoding.EncodeToString([]byte("[Service]\nEnvironmentFile=-/etc/fluent-bit/r2.env\n"))
-		script.WriteString("install -d -m 0750 /etc/fluent-bit /etc/systemd/system/fluent-bit.service.d\n")
+		script.WriteString("install -d -m 0750 /etc\n")
 		script.WriteString("printf '%s' '")
 		script.WriteString(encodedEnv)
-		script.WriteString("' | base64 --decode > /etc/fluent-bit/r2.env\n")
-		script.WriteString("chmod 0600 /etc/fluent-bit/r2.env\n")
-		script.WriteString("printf '%s' '")
-		script.WriteString(encodedDropIn)
-		script.WriteString("' | base64 --decode > /etc/systemd/system/fluent-bit.service.d/r2.conf\n")
+		script.WriteString("' | base64 --decode > /etc/logstash-archiver.env\n")
+		script.WriteString("chmod 0600 /etc/logstash-archiver.env\n")
+	} else {
+		script.WriteString("rm -f /etc/logstash-archiver.env\n")
 	}
 	script.WriteString("systemctl daemon-reload\n")
+	if len(archiverBinary) > 0 {
+		script.WriteString("systemctl enable --now logstash-archiver\n")
+	}
 	script.WriteString("systemctl enable fluent-bit\n")
 	script.WriteString("if ! systemctl restart fluent-bit; then\n")
 	script.WriteString("    systemctl status fluent-bit --no-pager --full || true\n")

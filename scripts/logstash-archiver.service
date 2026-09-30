@@ -6,6 +6,7 @@ Wants=fluent-bit.service
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/logstash-archiver --spool-dir /var/log/fluent-bit-archive --archive-dir /var/log/fluent-bit-archives
+EnvironmentFile=-/etc/logstash-archiver.env
 Restart=on-failure
 RestartSec=5
 User=root
