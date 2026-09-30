@@ -14,7 +14,7 @@ func TestNewSSHDeployer(t *testing.T) {
 }
 
 func TestRemoteSetupScript(t *testing.T) {
-	script := string(remoteSetupScript([]byte("apt-get update"), []byte("[SERVICE]\n"), true))
+	script := string(remoteSetupScript([]byte("apt-get update"), []byte("[SERVICE]\n"), Request{Teardown: true, Storage: "local", ArchiverBuild: "none"}, nil, nil, nil))
 	encodedInstall := base64.StdEncoding.EncodeToString([]byte("apt-get update"))
 	encodedConfig := base64.StdEncoding.EncodeToString([]byte("[SERVICE]\n"))
 
@@ -24,7 +24,7 @@ func TestRemoteSetupScript(t *testing.T) {
 		"DEBIAN_FRONTEND=noninteractive apt-get remove -y fluent-bit 2>/dev/null || true",
 		"rm -rf /etc/fluent-bit",
 		"printf '%s' '" + encodedInstall + "' | base64 --decode | bash",
-		"install -d -m 0750 /var/lib/fluent-bit /var/log/fluent-bit-storage",
+		"install -d -m 0750 /var/lib/fluent-bit /var/log/fluent-bit-storage /var/log/fluent-bit-archive",
 		"printf '%s' '" + encodedConfig + "' | base64 --decode > /etc/fluent-bit/fluent-bit.conf",
 		"systemctl daemon-reload",
 		"systemctl enable fluent-bit",
@@ -40,7 +40,7 @@ func TestRemoteSetupScript(t *testing.T) {
 }
 
 func TestRemoteSetupScriptCanSkipTeardown(t *testing.T) {
-	script := string(remoteSetupScript(nil, nil, false))
+	script := string(remoteSetupScript(nil, nil, Request{Storage: "local", ArchiverBuild: "none"}, nil, nil, nil))
 	if strings.Contains(script, "apt-get remove -y fluent-bit") {
 		t.Fatalf("setup script should not remove Fluent Bit when teardown is disabled: %s", script)
 	}

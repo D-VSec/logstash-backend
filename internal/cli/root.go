@@ -31,6 +31,8 @@ type DeployRequest struct {
 	InstallScript string
 	ConfigFile    string
 	Teardown      bool
+	Storage       string
+	ArchiverBuild string
 }
 
 type RetrieveRequest struct {
@@ -62,6 +64,8 @@ type deployOptions struct {
 	InstallScript string
 	ConfigFile    string
 	Teardown      bool
+	Storage       string
+	ArchiverBuild string
 	DryRun        bool
 }
 
@@ -115,6 +119,12 @@ func newDeployCommand(stdout io.Writer, deployer Deployer) *cobra.Command {
 			if options.Auth != "private-key" && options.Auth != "password" {
 				return errors.New("--auth must be private-key or password")
 			}
+			if options.Storage != "local" && options.Storage != "r2" {
+				return errors.New("--storage must be local or r2")
+			}
+			if options.ArchiverBuild != "none" && options.ArchiverBuild != "linux-amd64" && options.ArchiverBuild != "linux-arm64" {
+				return errors.New("--archiver-build must be linux-amd64, linux-arm64, or none")
+			}
 			if options.Auth == "private-key" {
 				return validateRequired("identity-file", options.IdentityFile)
 			}
@@ -129,13 +139,18 @@ func newDeployCommand(stdout io.Writer, deployer Deployer) *cobra.Command {
 				InstallScript: options.InstallScript,
 				ConfigFile:    options.ConfigFile,
 				Teardown:      options.Teardown,
+				Storage:       options.Storage,
+				ArchiverBuild: options.ArchiverBuild,
+			}
+			if options.Storage == "r2" && !cmd.Flags().Changed("config-file") {
+				request.ConfigFile = "scripts/fluent-bit-r2.conf"
 			}
 			if options.DryRun {
 				credential := request.Auth
 				if request.Auth == "private-key" {
 					credential += " " + request.IdentityFile
 				}
-				_, err := fmt.Fprintf(cmd.OutOrStdout(), "deploy plan: %s Fluent Bit on %s@%s using %s, %s, and %s\n", teardownLabel(request.Teardown), request.User, request.Host, credential, request.InstallScript, request.ConfigFile)
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "deploy plan: %s Fluent Bit on %s@%s using %s, %s storage, %s archiver, %s, and %s\n", teardownLabel(request.Teardown), request.User, request.Host, credential, request.Storage, request.ArchiverBuild, request.InstallScript, request.ConfigFile)
 				return err
 			}
 			if deployer == nil {
@@ -152,6 +167,8 @@ func newDeployCommand(stdout io.Writer, deployer Deployer) *cobra.Command {
 	command.Flags().StringVar(&options.InstallScript, "install-script", "scripts/install-fluentbit.sh", "path to the Fluent Bit installation script")
 	command.Flags().StringVar(&options.ConfigFile, "config-file", "scripts/fluent-bit.conf", "path to the Fluent Bit configuration")
 	command.Flags().BoolVar(&options.Teardown, "teardown", true, "remove the previous Fluent Bit installation before installing")
+	command.Flags().StringVar(&options.Storage, "storage", "local", "log storage target: local or r2")
+	command.Flags().StringVar(&options.ArchiverBuild, "archiver-build", "linux-amd64", "archiver build target: linux-amd64, linux-arm64, or none")
 	command.Flags().BoolVar(&options.DryRun, "dry-run", false, "print the deployment plan without connecting")
 	return command
 }

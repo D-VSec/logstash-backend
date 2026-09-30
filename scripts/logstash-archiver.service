@@ -1,0 +1,14 @@
+[Unit]
+Description=Logstash local archive worker
+After=fluent-bit.service
+Wants=fluent-bit.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/logstash-archiver --spool-dir /var/log/fluent-bit-archive --archive-dir /var/log/fluent-bit-archives
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
